@@ -6,6 +6,7 @@
   "main": "scrape.js",
   "scripts": {
     "try-api": "node scrape-woocommerce-api.js",
+    "categorize": "node categorize.js",
     "discover": "node discover.js",
     "scrape": "node scrape.js",
     "export-csv": "node export-csv.js"
