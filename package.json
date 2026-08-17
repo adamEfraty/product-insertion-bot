@@ -1,0 +1,18 @@
+{
+  "name": "marshal-scraper",
+  "version": "1.0.0",
+  "description": "Scraper for marshal.co.il product catalog (WooCommerce store)",
+  "type": "commonjs",
+  "main": "scrape.js",
+  "scripts": {
+    "try-api": "node scrape-woocommerce-api.js",
+    "discover": "node discover.js",
+    "scrape": "node scrape.js",
+    "export-csv": "node export-csv.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "cheerio": "^1.0.0",
+    "p-limit": "^3.1.0"
+  }
+}
