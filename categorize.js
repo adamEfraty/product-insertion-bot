@@ -2,9 +2,10 @@
  * Phase 3: reads scraped products and assigns each one to your real
  * WooCommerce categories (dutypharm.com) using an AI model.
  *
- * Provider: set AI_PROVIDER=groq (default), openai, gemini, or claude.
- * Requires GROQ_API_KEY (default), OPENAI_API_KEY, GEMINI_API_KEY, or
- * ANTHROPIC_API_KEY depending on which provider you use.
+ * Provider: set AI_PROVIDER=openai (default), AI_PROVIDER=gemini, or
+ * AI_PROVIDER=claude.
+ * Requires OPENAI_API_KEY (default), GEMINI_API_KEY, or ANTHROPIC_API_KEY
+ * depending on which provider you use.
  *
  * Input:  output/products-api.jsonl (preferred) or output/products.jsonl
  * Output: output/products-categorized.jsonl
@@ -18,9 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const pLimit = require('p-limit');
 
-const PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase();
+const PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
 const PROVIDERS = {
-  groq: './utils/groq',
   openai: './utils/openai',
   gemini: './utils/gemini',
   claude: './utils/claude',
