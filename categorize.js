@@ -100,9 +100,9 @@ async function main() {
         const myCategories = categoryIds
           .map((id) => getCategoryById(id))
           .filter(Boolean)
-          .map((c) => ({ id: c.id, name: c.name, slug: c.slug, path: c.path }));
+          .map((c) => ({ id: c.id, name: c.name, slug: c.slug, path: c.path, parent: c.parent, link: c.link }));
 
-        const enriched = { ...product, myCategories };
+        const enriched = { ...product, categories: myCategories };
         outStream.write(JSON.stringify(enriched) + '\n');
 
         doneUrls.add(url);
