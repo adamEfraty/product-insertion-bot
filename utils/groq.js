@@ -1,15 +1,13 @@
 const axios = require('axios');
-const dotenv = require("dotenv");
-dotenv.config();
 
-const MODEL = process.env.OPENAI_MODEL || 'gpt-5.1';
-const API_URL = 'https://api.openai.com/v1/chat/completions';
+const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
-if (!process.env.OPENAI_API_KEY) {
+if (!process.env.GROQ_API_KEY) {
   console.error(
-    '\nMissing OPENAI_API_KEY environment variable.\n' +
-    'Get a key from https://platform.openai.com/api-keys and set it, e.g.:\n' +
-    '  export OPENAI_API_KEY=sk-...\n'
+    '\nMissing GROQ_API_KEY environment variable.\n' +
+    'Get a key from https://console.groq.com/keys and set it, e.g.:\n' +
+    '  export GROQ_API_KEY=gsk_...\n'
   );
   process.exit(1);
 }
@@ -17,7 +15,7 @@ if (!process.env.OPENAI_API_KEY) {
 const client = axios.create({
   baseURL: API_URL,
   headers: {
-    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
     'Content-Type': 'application/json',
   },
   timeout: 30000,
@@ -73,29 +71,15 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// OpenAI structured outputs (strict mode) require every property to be
-// listed in "required" and additionalProperties: false at every level.
-const RESPONSE_SCHEMA = {
-  name: 'category_classification',
-  strict: true,
-  schema: {
-    type: 'object',
-    properties: {
-      categoryIds: {
-        type: 'array',
-        items: { type: 'integer' },
-        description: 'IDs of every category from the provided list that fits this product. Always at least one.',
-      },
-    },
-    required: ['categoryIds'],
-    additionalProperties: false,
-  },
-};
-
 /**
- * Sends one product + the full category list to OpenAI and gets back
+ * Sends one product + the full category list to Groq and gets back
  * the category IDs that best fit. Always forces at least one match.
  * Retries on transient failures / malformed JSON.
+ *
+ * Uses Groq's "json_object" response mode (broadly supported across
+ * models) rather than strict json_schema mode, which is currently only
+ * available on a handful of Groq models — json_object + explicit prompt
+ * instructions is the more portable choice here.
  */
 async function classifyProduct(product, categories, { retries = 3 } = {}) {
   const categoryListText = buildCategoryListText(categories);
@@ -107,13 +91,17 @@ Rules:
 - Choose from the provided category list ONLY. Never invent a category.
 - A product can belong to more than one category if genuinely relevant (e.g. a magnesium + melatonin combo product could fit both "Magnesium" and "Sleep & Anxiety").
 - Always return at least one category — pick your best guess even if the fit is imperfect. Never return an empty list.
-- Prefer the most specific applicable category (e.g. "Magnesium" over its parent "Minerals") but also include a broader parent category if the product doesn't cleanly fit any specific child category.`;
+- Prefer the most specific applicable category (e.g. "Magnesium" over its parent "Minerals") but also include a broader parent category if the product doesn't cleanly fit any specific child category.
+- Respond with ONLY a JSON object, no other text, no markdown code fences, in this exact shape:
+{"categoryIds": [<id>, <id>, ...]}`;
 
   const userPrompt = `Category list (id | full path):
 ${categoryListText}
 
 Product to classify:
-${productText}`;
+${productText}
+
+Respond with only the JSON object described in the system instructions.`;
 
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -124,17 +112,16 @@ ${productText}`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: RESPONSE_SCHEMA,
-        },
-        max_completion_tokens: 500,
+        response_format: { type: 'json_object' },
+        max_tokens: 500,
+        temperature: 0.2,
       });
 
       const message = res.data.choices && res.data.choices[0] && res.data.choices[0].message;
-      if (!message || !message.content) throw new Error('No content in OpenAI response');
+      if (!message || !message.content) throw new Error('No content in Groq response');
 
-      const parsed = JSON.parse(message.content);
+      const cleaned = message.content.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
 
       if (!Array.isArray(parsed.categoryIds) || parsed.categoryIds.length === 0) {
         throw new Error('Model returned no categoryIds');
@@ -145,16 +132,13 @@ ${productText}`;
       lastErr = err;
       const status = err.response ? err.response.status : null;
       const body = err.response ? err.response.data : null;
-      const errType = body && body.error ? body.error.type : null;
-      const errCode = body && body.error ? body.error.code : null;
+      const errType = body && body.error ? body.error.type || body.error.code : null;
 
-      // insufficient_quota / billing issues will never succeed on retry —
-      // fail fast with a clear message instead of burning through attempts.
-      if (status === 429 && (errType === 'insufficient_quota' || errCode === 'insufficient_quota')) {
+      // A quota/billing error will never succeed on retry — fail fast.
+      if (status === 429 && errType && /quota|credit|balance/i.test(errType)) {
         console.error(
-          `\nOpenAI billing/quota error (insufficient_quota). Retrying won't help.\n` +
-          `Check https://platform.openai.com/settings/organization/billing — ` +
-          `you likely need to add a payment method or increase your usage limit.\n` +
+          `\nGroq billing/quota error. Retrying won't help.\n` +
+          `Check https://console.groq.com/settings/billing\n` +
           `Full error: ${JSON.stringify(body)}\n`
         );
         throw err;
