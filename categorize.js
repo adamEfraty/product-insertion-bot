@@ -39,7 +39,7 @@ const HTML_PRODUCTS_FILE = path.join(__dirname, './output/products.jsonl');
 const OUT_FILE = path.join(__dirname, './output/products-categorized.jsonl');
 const DONE_FILE = path.join(__dirname, './output/categorize-done-urls.json');
 
-const CONCURRENCY = 3; // keep modest — this is hitting the Claude API per product
+const CONCURRENCY = Number(process.env.CATEGORIZE_CONCURRENCY) || 1; // keep modest — this is hitting the AI API per product; bump via env var once you've confirmed your rate limits can handle it
 
 function loadJsonSafe(file, fallback) {
   try {

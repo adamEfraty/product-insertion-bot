@@ -142,10 +142,27 @@ ${productText}`;
     } catch (err) {
       lastErr = err;
       const status = err.response ? err.response.status : null;
+      const body = err.response ? err.response.data : null;
+      const errType = body && body.error ? body.error.type : null;
+      const errCode = body && body.error ? body.error.code : null;
+
+      // insufficient_quota / billing issues will never succeed on retry —
+      // fail fast with a clear message instead of burning through attempts.
+      if (status === 429 && (errType === 'insufficient_quota' || errCode === 'insufficient_quota')) {
+        console.error(
+          `\nOpenAI billing/quota error (insufficient_quota). Retrying won't help.\n` +
+          `Check https://platform.openai.com/settings/organization/billing — ` +
+          `you likely need to add a payment method or increase your usage limit.\n` +
+          `Full error: ${JSON.stringify(body)}\n`
+        );
+        throw err;
+      }
+
       const delay = 1500 * Math.pow(2, attempt);
       console.warn(
         `  [retry] classify failed for "${product.title || product.name || product.url}" ` +
-        `(attempt ${attempt + 1}/${retries + 1}, ${status || err.message}). Waiting ${delay}ms...`
+        `(attempt ${attempt + 1}/${retries + 1}, status=${status}, type=${errType || 'unknown'}). ` +
+        `Body: ${body ? JSON.stringify(body) : err.message}. Waiting ${delay}ms...`
       );
       await sleep(delay);
     }
