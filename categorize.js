@@ -1,8 +1,10 @@
 /**
  * Phase 3: reads scraped products and assigns each one to your real
- * WooCommerce categories (dutypharm.com) using Claude.
+ * WooCommerce categories (dutypharm.com) using an AI model.
  *
- * Requires ANTHROPIC_API_KEY to be set in the environment.
+ * Provider: set AI_PROVIDER=gemini (default) or AI_PROVIDER=claude.
+ * Requires GEMINI_API_KEY (default) or ANTHROPIC_API_KEY (if using claude)
+ * to be set in the environment.
  *
  * Input:  output/products-api.jsonl (preferred) or output/products.jsonl
  * Output: output/products-categorized.jsonl
@@ -15,7 +17,11 @@
 const fs = require('fs');
 const path = require('path');
 const pLimit = require('p-limit');
-const { classifyProduct } = require('./utils/claude');
+
+const PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
+const { classifyProduct } = PROVIDER === 'claude' ? require('./utils/claude') : require('./utils/gemini');
+console.log(`Using AI provider: ${PROVIDER}`);
+
 const { getClassifiableCategories, getCategoryById } = require('./utils/categoryTree');
 
 const API_PRODUCTS_FILE = path.join(__dirname, './output/products-api.jsonl');
