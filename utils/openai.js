@@ -1,13 +1,13 @@
 const axios = require('axios');
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const MODEL = process.env.OPENAI_MODEL || 'gpt-5.1';
+const API_URL = 'https://api.openai.com/v1/chat/completions';
 
-if (!process.env.GEMINI_API_KEY) {
+if (!process.env.OPENAI_API_KEY) {
   console.error(
-    '\nMissing GEMINI_API_KEY environment variable.\n' +
-    'Get a key from https://aistudio.google.com/apikey and set it, e.g.:\n' +
-    '  export GEMINI_API_KEY=AIza...\n'
+    '\nMissing OPENAI_API_KEY environment variable.\n' +
+    'Get a key from https://platform.openai.com/api-keys and set it, e.g.:\n' +
+    '  export OPENAI_API_KEY=sk-...\n'
   );
   process.exit(1);
 }
@@ -15,7 +15,7 @@ if (!process.env.GEMINI_API_KEY) {
 const client = axios.create({
   baseURL: API_URL,
   headers: {
-    'x-goog-api-key': process.env.GEMINI_API_KEY,
+    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
     'Content-Type': 'application/json',
   },
   timeout: 30000,
@@ -71,20 +71,27 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// OpenAI structured outputs (strict mode) require every property to be
+// listed in "required" and additionalProperties: false at every level.
 const RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: {
-    categoryIds: {
-      type: 'array',
-      items: { type: 'integer' },
-      description: 'IDs of every category from the provided list that fits this product. Always at least one.',
+  name: 'category_classification',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      categoryIds: {
+        type: 'array',
+        items: { type: 'integer' },
+        description: 'IDs of every category from the provided list that fits this product. Always at least one.',
+      },
     },
+    required: ['categoryIds'],
+    additionalProperties: false,
   },
-  required: ['categoryIds'],
 };
 
 /**
- * Sends one product + the full category list to Gemini and gets back
+ * Sends one product + the full category list to OpenAI and gets back
  * the category IDs that best fit. Always forces at least one match.
  * Retries on transient failures / malformed JSON.
  */
@@ -110,20 +117,22 @@ ${productText}`;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await client.post('', {
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-          maxOutputTokens: 500,
+        model: MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: RESPONSE_SCHEMA,
         },
+        max_completion_tokens: 500,
       });
 
-      const candidate = res.data.candidates && res.data.candidates[0];
-      const textPart = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0];
-      if (!textPart || !textPart.text) throw new Error('No text part in Gemini response');
+      const message = res.data.choices && res.data.choices[0] && res.data.choices[0].message;
+      if (!message || !message.content) throw new Error('No content in OpenAI response');
 
-      const parsed = JSON.parse(textPart.text);
+      const parsed = JSON.parse(message.content);
 
       if (!Array.isArray(parsed.categoryIds) || parsed.categoryIds.length === 0) {
         throw new Error('Model returned no categoryIds');

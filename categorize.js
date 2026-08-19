@@ -2,9 +2,10 @@
  * Phase 3: reads scraped products and assigns each one to your real
  * WooCommerce categories (dutypharm.com) using an AI model.
  *
- * Provider: set AI_PROVIDER=gemini (default) or AI_PROVIDER=claude.
- * Requires GEMINI_API_KEY (default) or ANTHROPIC_API_KEY (if using claude)
- * to be set in the environment.
+ * Provider: set AI_PROVIDER=openai (default), AI_PROVIDER=gemini, or
+ * AI_PROVIDER=claude.
+ * Requires OPENAI_API_KEY (default), GEMINI_API_KEY, or ANTHROPIC_API_KEY
+ * depending on which provider you use.
  *
  * Input:  output/products-api.jsonl (preferred) or output/products.jsonl
  * Output: output/products-categorized.jsonl
@@ -18,8 +19,17 @@ const fs = require('fs');
 const path = require('path');
 const pLimit = require('p-limit');
 
-const PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase();
-const { classifyProduct } = PROVIDER === 'claude' ? require('./utils/claude') : require('./utils/gemini');
+const PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+const PROVIDERS = {
+  openai: './utils/openai',
+  gemini: './utils/gemini',
+  claude: './utils/claude',
+};
+if (!PROVIDERS[PROVIDER]) {
+  console.error(`Unknown AI_PROVIDER "${PROVIDER}". Use one of: ${Object.keys(PROVIDERS).join(', ')}`);
+  process.exit(1);
+}
+const { classifyProduct } = require(PROVIDERS[PROVIDER]);
 console.log(`Using AI provider: ${PROVIDER}`);
 
 const { getClassifiableCategories, getCategoryById } = require('./utils/categoryTree');
