@@ -1,4 +1,6 @@
 const axios = require('axios');
+const dotenv = require("dotenv");
+dotenv.config();
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-5.1';
 const API_URL = 'https://api.openai.com/v1/chat/completions';
